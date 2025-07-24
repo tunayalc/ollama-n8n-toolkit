@@ -1,0 +1,181 @@
+{
+  "name": "Rakip analiz ve kıyas botu",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama_core:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3"
+            },
+            {
+              "name": "=stream",
+              "value": "={{ false }}"
+            },
+            {
+              "name": "=prompt",
+              "value": "=`Sen bir pazar araştırma stratejisti ve ürün yönetimi danışmanısın. Sana JSON formatında kendi uygulamamız ('nkolay') ve rakiplerimizin kullanıcı yorumu analiz verilerini sunacağım. Görevin, bu verileri kullanarak detaylı bir kıyaslama raporu ve aksiyon planı hazırlamak.  İsteklerim şunlar: 1. Her bir rakibi 'nkolay' ile **ayrı ayrı** kıyasla. 2. Kıyaslamayı 'Pozitif Duygu Oranı', 'En Çok Beğenilen Konu' ve 'En Çok Şikayet Edilen Konu' üzerinden yap. 3. Her kıyaslamanın sonunda, 'nkolay'ın o rakibe karşı nerede güçlü, nerede zayıf olduğunu net bir şekilde belirt. 4. Tüm kıyaslamalar bittikten sonra, 'NKOLAY İÇİN STRATEJİK ÇÖZÜM ÖNERİLERİ' başlığı altında, bu analizden yola çıkarak ürün geliştirme, pazarlama ve müşteri hizmetleri için **3 adet somut ve aksiyon alınabilir çözüm önerisi** sun.  Cevabını Markdown formatında, net başlıklar altında ver.  İşte analiz verileri: ${JSON.stringify($json.comparison_data)}`"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "df8190b9-bb8e-4434-a267-695d01acdc00",
+      "name": "Analiz"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/raporlar/PAZAR_ANALIZ_RAPORU.xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        176,
+        0
+      ],
+      "id": "23808dd9-9a30-4b63-9363-9e23fea000d5",
+      "name": "Yorum analizini oku"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        384,
+        0
+      ],
+      "id": "584e7f19-8eae-44f3-aaf9-6256ac74e80b",
+      "name": "Dosyayı ayır"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node – \"Run Once for All Items\"\n * =================================================\n * Birden fazla uygulamaya ait kullanıcı yorumlarını analiz eder,\n * kendi uygulamanız (MY_APP) ile rakipler arasındaki farkları hesaplar\n * ve sonuçları yapılandırılmış JSON olarak sonraki düğüme iletir.\n */\n\n// ───────────── Parametreler ─────────────\nconst MY_APP = 'nkolay'.toLowerCase(); // ← Kendi uygulamanızın adı\n\n// ───────────── 1) Girdiyi Topla ────────────\n// $input.all() → Code düğümüne gelen tüm item’ları dizi olarak verir\nconst allReviews = $input.all().map(i => i.json);\n\n// ───────────── 2) İstatistikleri Hesapla ────────────\nconst statsByApp = {};\n\nfor (const rev of allReviews) {\n  const app = (rev.app_name || 'Bilinmeyen').trim();\n\n  // Uygulama için başlangıç objesini oluştur\n  if (!statsByApp[app]) {\n    statsByApp[app] = {\n      total: 0,\n      moods: { Pozitif: 0, Negatif: 0, Nötr: 0 },\n      topics: {}\n    };\n  }\n\n  const s = statsByApp[app];\n\n  // Toplam yorum sayısı\n  s.total++;\n\n  // Duygu sayacı\n  const mood = (rev.duygu || 'Nötr').trim();\n  s.moods[mood] = (s.moods[mood] || 0) + 1;\n\n  // Konu sayacı\n  const topic = (rev.konu || 'Genel').trim();\n  s.topics[topic] = (s.topics[topic] || 0) + 1;\n}\n\n// Yardımcı: belirli duyguya göre en popüler konuyu bul\nfunction getTopTopic(appName, targetMood) {\n  const subset = allReviews.filter(r => (r.app_name || '').trim() === appName &&\n                                        (r.duygu || 'Nötr').trim() === targetMood)\n                           .map(r => (r.konu || 'Genel').trim());\n  if (!subset.length) return 'Belirlenemedi';\n\n  const counts = {};\n  for (const t of subset) counts[t] = (counts[t] || 0) + 1;\n  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];\n}\n\n// ───────────── 3) Karşılaştırma Yapısı ────────────\nconst comparison = {\n  our_app: {},\n  competitors: []\n};\n\nfor (const [app, s] of Object.entries(statsByApp)) {\n  const positivePercent = s.total ? +(s.moods.Pozitif / s.total * 100).toFixed(1) : 0;\n\n  const profile = {\n    name: app,\n    total_reviews: s.total,\n    positive_percent: positivePercent,\n    top_positive_topic: getTopTopic(app, 'Pozitif'),\n    top_negative_topic: getTopTopic(app, 'Negatif')\n  };\n\n  if (app.toLowerCase() === MY_APP) {\n    comparison.our_app = profile;\n  } else {\n    comparison.competitors.push(profile);\n  }\n}\n\n// ───────────── 4) Farkları Hesapla ve Sırala ────────────\ncomparison.competitors = comparison.competitors\n  .map(c => ({\n    ...c,\n    diff_positive_percent: +(comparison.our_app.positive_percent - c.positive_percent).toFixed(1),\n    diff_total_reviews: comparison.our_app.total_reviews - c.total_reviews\n  }))\n  .sort((a, b) => b.diff_positive_percent - a.diff_positive_percent);\n\n// ───────────── 5) Çıktıyı Döndür ────────────\nreturn [\n  {\n    json: {\n      comparison_data: comparison\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        0
+      ],
+      "id": "4cf4e912-4f94-4222-aa99-25e6b78913f4",
+      "name": "Yorumu düzenle"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "60957d5f-6d9f-4e26-b6cb-cec4c6e28f24",
+              "name": "=rapor_metni",
+              "value": "={{ $json.response }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1008,
+        0
+      ],
+      "id": "1cc4b5e0-96f3-4ac6-8651-79e574990788",
+      "name": "Çıktı al"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7adc82d7-8ae6-46e3-97df-cb7cc158d9df",
+      "name": "Başlat"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Analiz": {
+      "main": [
+        [
+          {
+            "node": "Çıktı al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yorum analizini oku": {
+      "main": [
+        [
+          {
+            "node": "Dosyayı ayır",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dosyayı ayır": {
+      "main": [
+        [
+          {
+            "node": "Yorumu düzenle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yorumu düzenle": {
+      "main": [
+        [
+          {
+            "node": "Analiz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Başlat": {
+      "main": [
+        [
+          {
+            "node": "Yorum analizini oku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "800f1deb-e14a-4df2-8e52-e5311dd7ef30",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e54ee4e6fc83723e46808156f13a11c3e366911a63f720563a3d874194668d2b"
+  },
+  "id": "UHN67z3efXyMYl37",
+  "tags": []
+}

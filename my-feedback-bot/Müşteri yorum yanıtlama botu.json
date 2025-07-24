@@ -1,0 +1,359 @@
+{
+  "name": "Müşteri yorum yanıtlama botu",
+  "nodes": [
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "40e4fb1b-7d17-4aab-985b-570c10a75c9e",
+      "name": "Google Yorumlarını Ayır",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -1104,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama_core:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"model\": \"llama3\",\n    \"format\": \"json\",\n    \"stream\": false,\n    \"prompt\": \"GÖREVİN: Aşağıdaki müşteri yorumunun ana duygusunu analiz et. Sadece 'Olumlu', 'Olumsuz' veya 'Nötr' kelimelerinden birini içeren bir JSON çıktısı üret. Yorumda hem iyi hem kötü şeyler varsa, genel havaya göre karar ver. Özellikle çözüm arayan, şikayet eden veya bir sorundan bahseden yorumlar 'Olumsuz' kabul edilmelidir.\\n\\nYORUM: \\\"{{ $json.content || $json.comment }}\\\"\\n\\nÇIKTI FORMATI: {\\\"sentiment\\\": \\\"SEÇİMİN\\\"}\"\n}",
+        "options": {}
+      },
+      "id": "fbc3e435-7970-478e-abce-f89332561b3b",
+      "name": "Duygu Analizi Yap (Yargıç)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "3e8a3591-bced-4e22-acc8-eb3042eae7ce",
+              "leftValue": "={{ JSON.parse($json.response).sentiment }}",
+              "rightValue": "Olumsuz",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4a0e5efd-5caf-43c1-84a9-761d0d3dd28b",
+      "name": "Yorum Olumsuz mu?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama_core:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"model\": \"llama3\",\n    \"stream\": false,\n    \"prompt\": \"SENARYO: Sen, {{ $('Döngüye al').item.json.source }} platformundan gelen müşteri geri bildirimlerini yanıtlayan, son derece empatik, sakin ve çözüm odaklı bir müşteri temsilcisinin. Adın 'Destek Asistanı'.\\n\\nGÖREVİN: Aşağıdaki müşteri yorumuna, markamızın imajını koruyacak, müşteriye anlaşıldığını hissettirecek ve sorunu çözüme kavuşturmak için bir sonraki adımı belirtecek profesyonel bir yanıt oluştur.\\n\\nKURALLAR:\\n1. Asla yapılamayacak bir söz verme.\\n2. Müşteriyi suçlayıcı bir dil kullanma.\\n3. Yanıtın kısa, net ve samimi olsun (en fazla 4-5 cümle).\\n4. Mutlaka yaşadığı olumsuz deneyim için üzgün olduğunu belirt.\\n5. Sorunu daha detaylı incelemek için ona bir kanal öner (örn: \\\"Size özel olarak yardımcı olabilmemiz için destek@nkolay.com adresimize veya ilgili departmanımıza ulaşmanızı rica ederiz.\\\").\\n6. Yanıtını \\\"Saygılarımızla, N Kolay Destek Ekibi\\\" ile bitir.\\n\\nMÜŞTERİ YORUMU:\\n\\\"{{ $('Döngüye al').item.json.content || $('Döngüye al').item.json.comment }}\\\"\\n\\nŞimdi, bu kurallara göre ideal yanıtı oluştur.\"\n}",
+        "options": {}
+      },
+      "id": "b1c291e7-634e-40b9-993f-fc449372c3f2",
+      "name": "Çözüm Odaklı Yanıt Üret",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama_core:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n    \"model\": \"llama3\",\n    \"stream\": false,\n    \"prompt\": \"SENARYO: Sen, {{ $('Döngüye al').item.json.source }} platformundan gelen müşteri geri bildirimlerini yanıtlayan, son derece pozitif ve samimi bir müşteri temsilcisinin. Adın 'Destek Asistanı'.\\n\\nGÖREVİN: Aşağıdaki olumlu müşteri yorumuna, içten bir teşekkürle karşılık ver. Yanıtın kısa ve net olsun.\\n\\nKURALLAR:\\n1. Değerli geri bildirimi için teşekkür et.\\n2. Memnuniyetinin bizim için ne kadar önemli olduğunu vurgula.\\n3. Yanıtın en fazla 2-3 cümle olsun.\\n4. Yanıtını \\\"Saygılarımızla, N Kolay Destek Ekibi\\\" ile bitir.\\n\\nMÜŞTERİ YORUMU:\\n\\\"{{ $('Döngüye al').item.json.content || $('Döngüye al').item.json.comment }}\\\"\\n\\nŞimdi, bu kurallara göre ideal teşekkür mesajını oluştur.\"\n}",
+        "options": {}
+      },
+      "id": "9037e021-0fc8-45c4-92c7-86feb4c8df68",
+      "name": "Teşekkür Yanıtı Üret",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/google_data/google_reviews.json",
+        "options": {}
+      },
+      "id": "01c81446-6cee-4ab4-a79c-8b02e15f8eac",
+      "name": "Google Dosyasını Oku",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1568,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "options": {}
+      },
+      "id": "8479590f-5cac-4379-a71a-bd70c92ed014",
+      "name": "Google JSON Ayıkla",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1328,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/app_data/apple_reviews.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1552,
+        32
+      ],
+      "id": "f4c5d82a-fe6a-4673-8d5e-a1c1a7736e79",
+      "name": "Apple dosyasını oku"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -1344,
+        32
+      ],
+      "id": "203aa766-3777-4022-8cd2-f4f5a9bc2ccf",
+      "name": "Apple JSON ayıkla"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -1136,
+        32
+      ],
+      "id": "56e5320a-19ac-427e-af28-95bdd77765f3",
+      "name": "Apple verilerini ayır"
+    },
+    {
+      "parameters": {},
+      "id": "708f742b-aea5-4459-aac0-99413d24834a",
+      "name": "Başlat",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1824,
+        160
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "9f889888-1c88-4ac2-9459-d770ed0b7717",
+      "name": "Birleştir",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -928,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "353503e4-29bb-422f-ba3a-c1ab8c2b0d06",
+      "name": "Döngüye al",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -704,
+        112
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Yorumlarını Ayır": {
+      "main": [
+        [
+          {
+            "node": "Birleştir",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Duygu Analizi Yap (Yargıç)": {
+      "main": [
+        [
+          {
+            "node": "Yorum Olumsuz mu?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yorum Olumsuz mu?": {
+      "main": [
+        [
+          {
+            "node": "Çözüm Odaklı Yanıt Üret",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Teşekkür Yanıtı Üret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Dosyasını Oku": {
+      "main": [
+        [
+          {
+            "node": "Google JSON Ayıkla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google JSON Ayıkla": {
+      "main": [
+        [
+          {
+            "node": "Google Yorumlarını Ayır",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apple dosyasını oku": {
+      "main": [
+        [
+          {
+            "node": "Apple JSON ayıkla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apple JSON ayıkla": {
+      "main": [
+        [
+          {
+            "node": "Apple verilerini ayır",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apple verilerini ayır": {
+      "main": [
+        [
+          {
+            "node": "Birleştir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Başlat": {
+      "main": [
+        [
+          {
+            "node": "Google Dosyasını Oku",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Apple dosyasını oku",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Birleştir": {
+      "main": [
+        [
+          {
+            "node": "Döngüye al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Döngüye al": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Duygu Analizi Yap (Yargıç)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "262b7ac4-e010-46a1-9784-5c06d6fa2a05",
+  "meta": {
+    "instanceId": "e54ee4e6fc83723e46808156f13a11c3e366911a63f720563a3d874194668d2b"
+  },
+  "id": "o1qneRAi3WT6EmCM",
+  "tags": []
+}
